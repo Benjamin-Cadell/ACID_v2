@@ -5,46 +5,50 @@ import glob
 import matplotlib.pyplot as plt
 import time
 from scipy.signal import find_peaks
-from scipy.interpolate import interp1d,LSQUnivariateSpline
+from scipy.interpolate import interp1d, LSQUnivariateSpline
 import warnings
+from tqdm import tqdm
 
-def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn, order, run_name, velocities):
+def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn, 
+        order, run_name, velocities, verbose=False):
 
-    # t0 = time.time()
+    t0 = time.time()
 
     #idx = tuple([flux_obs>0])
     # in optical depth space
-    rms = rms/flux_obs
+    rms = rms / flux_obs
     flux_obs = np.log(flux_obs)
-   
-    deltav = velocities[1]-velocities[0]
+
+    deltav = velocities[1] - velocities[0]
 
     #### This is the EXPECTED linelist (for a slow rotator of the same spectral type) ####
     linelist_expected = np.genfromtxt('%s'%linelist, skip_header=4, delimiter=',', usecols=(1,9))
-    wavelengths_expected1 =np.array(linelist_expected[:,0])
+    wavelengths_expected1 = np.array(linelist_expected[:,0])
     depths_expected1 = np.array(linelist_expected[:,1])
 
     wavelength_min = np.min(wavelengths)
     wavelength_max = np.max(wavelengths)
 
-    idx = np.logical_and(wavelengths_expected1>=wavelength_min, wavelengths_expected1<=wavelength_max)
-    wavelengths_expected=wavelengths_expected1[idx]
-    depths_expected=depths_expected1[idx]
+    idx = np.logical_and(wavelengths_expected1 >= wavelength_min,
+                         wavelengths_expected1 <= wavelength_max)
+    wavelengths_expected = wavelengths_expected1[idx]
+    depths_expected = depths_expected1[idx]
 
-    line_min = 1/(3*sn)
-    idx = (depths_expected>=line_min)
+    line_min = 1 / (3 * sn)
+    idx = (depths_expected >= line_min)
     wavelengths_expected = wavelengths_expected[idx]
     depths_expected = depths_expected[idx]
     no_line = len(depths_expected)
     
     depths_expected = -np.log(1-depths_expected)
-    
-    blankwaves=wavelengths
-    R_matrix=flux_obs
 
-    # t1 = time.time()
-    # print('Time is %s'%(t1-t0))
-    
+    blankwaves = wavelengths
+    R_matrix = flux_obs
+
+    # if verbose:
+    #     t1 = time.time()
+    #     print('Time for part 1: %s'%(t1-t0))
+
     # Calculate vdiff for all combinations of blankwaves and wavelengths_expected
     vdiff = ((blankwaves[:, np.newaxis] - wavelengths_expected) * 2.99792458e5) / wavelengths_expected
 
@@ -56,69 +60,67 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn, or
     vel = 2.99792458e5 * (diff / wavelengths_expected)
 
     # Calculate x and delta_x for valid velocities
-    if len(wavelengths)<= 7000:
+    # if verbose:
+    #     print(f"Number of wavelength ranges: {len(wavelengths)}")
+
+    if len(wavelengths) <= 3000:
         x = (vel[:, :, np.newaxis] - velocities) / deltav
         alpha_mask_1 = np.logical_and(-1. < x, x < 0.)
         alpha_mask_2 = np.logical_and(0. <= x, x < 1.)
         delta_x_1 = 1 + x
         delta_x_2 = 1 - x
-        delta_x_1[alpha_mask_1==False]=0
-        delta_x_2[alpha_mask_2==False]=0
+        delta_x_1[alpha_mask_1==False] = 0
+        delta_x_2[alpha_mask_2==False] = 0
 
         # Update alpha array using calculated delta_x values
         alpha = np.zeros((len(blankwaves), len(velocities)))
         alpha += (depths_expected[:, np.newaxis] * delta_x_1).sum(axis=1)
         alpha += (depths_expected[:, np.newaxis] * delta_x_2).sum(axis=1)
+
     else:
         warnings.warn('Large wavelength ranges give large computation time. Seperate wavelength range into smaller chunks for faster computation.', DeprecationWarning, stacklevel=2)
-        alpha=np.zeros((len(blankwaves), len(velocities)))
+        alpha = np.zeros((len(blankwaves), len(velocities)))
 
-        for j in range(0, len(blankwaves)):
-            for i in (range(0,len(wavelengths_expected))):
-                vdiff = ((blankwaves[j] - wavelengths_expected[i])*2.99792458e5)/wavelengths_expected[i]
-                if vdiff<=(np.max(velocities)+deltav) and vdiff>=(np.min(velocities)-deltav):
-                    diff=blankwaves[j]-wavelengths_expected[i]
-                    vel=2.99792458e5*(diff/wavelengths_expected[i])
+        for j in tqdm(range(0, len(blankwaves)), desc='Calculating alpha'):
+            for i in (range(0, len(wavelengths_expected))):
+                vdiff = ((blankwaves[j] - wavelengths_expected[i]) * 2.99792458e5) / wavelengths_expected[i]
+                if vdiff <= (np.max(velocities) + deltav) and vdiff >= (np.min(velocities) - deltav):
+                    diff = blankwaves[j] - wavelengths_expected[i]
+                    vel = 2.99792458e5 * (diff / wavelengths_expected[i])
                     for k in range(0, len(velocities)):
-                        x=(velocities[k]-vel)/deltav
-                        if -1.<x and x<0.:
-                            delta_x=(1+x)
-                            alpha[j, k] = alpha[j, k]+depths_expected[i]*delta_x
-                        elif 0.<=x and x<1.:
-                            delta_x=(1-x)
-                            alpha[j, k] = alpha[j, k]+depths_expected[i]*delta_x
+                        x = (velocities[k] - vel) / deltav
+                        if -1. < x and x < 0.:
+                            delta_x = (1 + x)
+                            alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
+                        elif 0. <= x and x < 1.:
+                            delta_x = (1 - x)
+                            alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
                 else:
                     pass
 
-    # t2 = time.time()
-    # print('Alpha time: %s'%(t2-t1))
-    
-    id_matrix=np.identity(len(flux_obs))
-    S_matrix=(1/rms)*id_matrix
+    id_matrix = np.identity(len(flux_obs))
+    S_matrix = (1/rms) * id_matrix
 
-    S_squared=np.dot(S_matrix, S_matrix)
-    alpha_transpose=(np.transpose(alpha))
+    S_squared = np.dot(S_matrix, S_matrix)
+    alpha_transpose = (np.transpose(alpha))
 
-    RHS_1=np.dot(alpha_transpose, S_squared)
-    RHS_final=np.dot(RHS_1, R_matrix)
+    RHS_1 = np.dot(alpha_transpose, S_squared)
+    RHS_final = np.dot(RHS_1, R_matrix)
 
-    LHS_preinvert=np.dot(RHS_1, alpha)
-    LHS_prep=np.matrix(LHS_preinvert)
+    LHS_preinvert = np.dot(RHS_1, alpha)
+    LHS_prep = np.matrix(LHS_preinvert)
 
-    P,L,U=linalg.lu(LHS_prep)
+    P, L, U = linalg.lu(LHS_prep)
 
-    n=len(LHS_prep)
-    B=np.identity(n)
+    n = len(LHS_prep)
+    B = np.identity(n)
     Z = linalg.solve_triangular(L, B, lower=True)
     X = linalg.solve_triangular(U, Z, lower=False)
-    LHS_final = np.matmul(X,np.transpose(P))
+    LHS_final = np.matmul(X, np.transpose(P))
 
-    profile=np.dot(LHS_final, RHS_final)
-    profile_errors_squared=np.diagonal(LHS_final)
-    profile_errors=np.sqrt(profile_errors_squared)
-
-    # t3 = time.time()
-    # print('Matrix multiplication time: %s'%(t3-t2))
+    profile = np.dot(LHS_final, RHS_final)
+    profile_errors_squared = np.diagonal(LHS_final)
+    profile_errors = np.sqrt(profile_errors_squared)
 
     return velocities, profile, profile_errors, alpha, wavelengths_expected, depths_expected1, no_line
 
@@ -1095,4 +1097,3 @@ def blaze_correct(file_type, spec_type, order, file, directory, masking, run_nam
     overlap = []
 
     return np.array(fluxes), np.array(wavelengths), np.array(flux_error_order), sn, np.median(wavelengths), np.zeros(wavelengths.shape), overlap ## for just LSD
-############################################################################################################

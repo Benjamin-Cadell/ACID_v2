@@ -1,48 +1,51 @@
+import sys, emcee, warnings, sys, os, glob, time, importlib
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 import numpy as np
-import emcee
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from astropy.io import fits
 import ACID_code.LSD_func_faster as LSD
-import glob
 from scipy.interpolate import interp1d
 from scipy.signal import find_peaks
 import multiprocessing as mp
 from functools import partial
 from multiprocessing import Pool
 from statistics import stdev
-import time
-import warnings
-
+from tqdm import tqdm
 from math import log10, floor
+warnings.filterwarnings("ignore")
+importlib.reload(LSD) # For interactive (ipython) use only
 
 def round_sig(x1, sig):
     return round(x1, sig-int(floor(log10(abs(x1))))-1)
-
-from scipy.optimize import curve_fit
 
 def gauss(x1, rv, sd, height, cont):
     y1 = height*np.exp(-(x1-rv)**2/(2*sd**2)) + cont
     return y1
 
-month = 'August2007'
-directory = '/Users/lucydolan/Starbase/HD189733 old/HD189733/'
+# month = 'August2007'
+# directory = '/Users/lucydolan/Starbase/HD189733 old/HD189733/'
 
 # run_name = input('Input nickname for this version of code (for saving figures): ')
 run_name = 'test'
 
 def findfiles(directory, file_type):
 
-    filelist1=glob.glob('%s/*/*%s**A_corrected*.fits'%(directory, file_type))    #finding corrected spectra
-    filelist=glob.glob('%s/*/*%s**A*.fits'%(directory, file_type))               #finding all A band spectra
+    filelist1 = glob.glob('%s/*/*%s**A_corrected*.fits'%(directory, file_type))    #finding corrected spectra
+    filelist = glob.glob('%s/*/*%s**A*.fits'%(directory, file_type))               #finding all A band spectra
 
-    filelist_final=[]
+    filelist_final = []
 
     for file in filelist:                                                        #filtering out corrected spectra
         count = 0
         for file1 in filelist1:
-            if file1 == file:count=1
-        if count==0:filelist_final.append(file)
+            if file1 == file:
+                count = 1
+        if count == 0:
+            filelist_final.append(file)
 
     return filelist_final
 
@@ -53,10 +56,10 @@ def continuumfit(fluxes, wavelengths, errors, poly_ord):
             cont_factor = np.mean(fluxes)
         idx = wavelengths.argsort()
         wavelength = wavelengths[idx]
-        fluxe = fluxes[idx]/cont_factor
+        fluxe = fluxes[idx] / cont_factor
         clipped_flux = []
         clipped_waves = []
-        binsize =100
+        binsize = 100
         for i in range(0, len(wavelength), binsize):
             waves = wavelength[i:i+binsize]
             flux = fluxe[i:i+binsize]
@@ -65,17 +68,18 @@ def continuumfit(fluxes, wavelengths, errors, poly_ord):
             waves = waves[indicies]
             clipped_flux.append(flux[len(flux)-1])
             clipped_waves.append(waves[len(waves)-1])
-        coeffs=np.polyfit(clipped_waves, clipped_flux, poly_ord)
+        coeffs = np.polyfit(clipped_waves, clipped_flux, poly_ord)
         poly = np.poly1d(coeffs)
-        fit = poly(wavelengths)*cont_factor
-        flux_obs = fluxes/fit
-        new_errors = errors/fit
+        fit = poly(wavelengths) * cont_factor
+        flux_obs = fluxes / fit
+        new_errors = errors / fit
 
         return np.concatenate((np.flip(coeffs), [cont_factor])), flux_obs, new_errors, fit
 
 def read_in_frames(order, filelist, file_type):
     
     # read in first frame
+    directory = '/Users/lucydolan/Starbase/HD189733 old/HD189733/' # Ben - Not sure why this needed to be manually added
     fluxes, wavelengths, flux_error_order, sn, mid_wave_order, telluric_spec, overlap = LSD.blaze_correct(file_type, 'order', order, filelist[0], directory, 'unmasked', run_name, 'y')
     
     frames = np.zeros((len(filelist), len(wavelengths)))
@@ -104,10 +108,10 @@ def read_in_frames(order, filelist, file_type):
     idx = (sns==np.max(sns))
     global reference_wave
     reference_wave = frame_wavelengths[idx][0]
-    reference_frame=frames[idx][0]
-    reference_frame[reference_frame == 0]=0.001
-    reference_error=errors[idx][0]
-    reference_error[reference_frame == 0]=1000000000000000000
+    reference_frame = frames[idx][0]
+    reference_frame[reference_frame == 0] = 0.001
+    reference_error = errors[idx][0]
+    reference_error[reference_frame == 0] = 1000000000000000000
 
     global frames_unadjusted
     frames_unadjusted = frames
@@ -138,15 +142,15 @@ def read_in_frames(order, filelist, file_type):
         binned_waves = np.array(binned_waves)
     
         ### fitting polynomial to div_frame
-        try:coeffs=np.polyfit(binned_waves, binned, 4)
-        except:coeffs=np.polyfit(binned_waves, binned, 2)
+        try:coeffs = np.polyfit(binned_waves, binned, 4)
+        except:coeffs = np.polyfit(binned_waves, binned, 2)
         poly = np.poly1d(coeffs)
         fit = poly(frame_wavelengths[n])
         frames[n] = frames[n]/fit
         errors[n] = errors[n]/fit
-        idx = (frames[n] ==0)
-        frames[n][idx]=0.00001
-        errors[n][idx]=1000000000
+        idx = (frames[n] == 0)
+        frames[n][idx] = 0.00001
+        errors[n][idx] = 1000000000
 
     return frame_wavelengths, frames, errors, sns, telluric_spec
 
@@ -171,7 +175,7 @@ def combine_spec(wavelengths_f, spectra_f, errors_f, sns_f):
     for n in range(len(wavelengths_f)):
 
         global reference_wave
-        idx_ref = (sns_f==np.max(sns_f))
+        idx_ref = (sns_f == np.max(sns_f))
         reference_wave = wavelengths_f[idx_ref][0]
 
         idx = np.where(wavelengths_f[n] != 0)[0]
@@ -188,8 +192,8 @@ def combine_spec(wavelengths_f, spectra_f, errors_f, sns_f):
         idx_ex = np.logical_and(reference_wave<=np.max(wavelengths_f[n][idx]), reference_wave>=np.min(wavelengths_f[n][idx]))
         idx_ex = tuple([idx_ex==False])
 
-        spectra_f[n][idx_ex]=1.
-        errors_f[n][idx_ex]=1000000000000
+        spectra_f[n][idx_ex] = 1.
+        errors_f[n][idx_ex] = 1000000000000
 
         ## mask out nans and zeros (these do not contribute to the main spectrum)
         where_are_NaNs = np.isnan(spectra_f[n])
@@ -216,13 +220,13 @@ def combine_spec(wavelengths_f, spectra_f, errors_f, sns_f):
         # print(weights_f[idx])
         weights_f[idx] = 0.
 
-        if sum(weights_f)>0:
-            weights_f = weights_f/np.sum(weights_f)
+        if sum(weights_f) > 0:
+            weights_f = weights_f / np.sum(weights_f)
 
-            spectrum_f[n]=sum(weights_f*temp_spec_f)
-            sn_f = sum(weights_f*sns_f)/sum(weights_f)
+            spectrum_f[n] = sum(weights_f * temp_spec_f)
+            sn_f = sum(weights_f * sns_f) / sum(weights_f)
 
-            spec_errors_f[n]=1/(sum(weights_f**2))
+            spec_errors_f[n] = 1 / (sum(weights_f ** 2))
         
         else: 
             spectrum_f[n] = np.mean(temp_spec_f)
@@ -251,9 +255,18 @@ def model_func(inputs, x):
     a = 2/(np.max(x)-np.min(x))
     b = 1 - a*np.max(x)
 
-    mdl1=0
-    for i in range(k_max,len(inputs)-1):
-        mdl1 = mdl1 + (inputs[i]*((x*a)+b)**(i-k_max))
+    mdl1 = 0
+    for i in range(k_max, len(inputs) - 1):
+        mdl1 = mdl1 + (inputs[i] * ((x * a) + b) ** (i - k_max))
+
+    # coefs = np.asarray(inputs[k_max:-1], dtype=float) # Potential improvement - Ben
+    # X = (a * x) + b
+    # if coefs.size:
+    #     powers = np.arange(coefs.size)
+    #     # X[:, None] ** powers -> shape (len(x), coefs.size); dot with coefs -> (len(x),)
+    #     mdl1 = np.dot(X[:, None] ** powers[None, :], coefs)
+    # else:
+    #     mdl1 = 0.0
 
     mdl1 = mdl1 * inputs[-1]
     
@@ -281,12 +294,13 @@ def log_prior(theta):
 
 
     for i in range(len(theta)):
-        if i<k_max: ## must lie in z
-            if -10<=theta[i]<=0.5: pass
+        if i < k_max: ## must lie in z
+            if -10 <= theta[i] <= 0.5:
+                pass
             else:
                 check = 1
 
-    if check==0:
+    if check == 0:
 
         # excluding the continuum points in the profile (in flux)
         z_cont = []
@@ -314,25 +328,31 @@ def log_probability(theta, x, y, yerr):
     return final
 
 ## iterative residual masking - mask continuous areas first - then possibly progress to masking the narrow lines
-def residual_mask(wavelengths, data_spec_in, data_err, initial_inputs, poly_ord, linelist, velocities=np.arange(-25, 25, 0.82), pix_chunk=20, dev_perc=25, tell_lines = [3820.33, 3933.66, 3968.47, 4327.74, 4307.90, 4383.55, 4861.34, 5183.62, 5270.39, 5889.95, 5895.92, 6562.81, 7593.70, 8226.96], n_sig=1):
+def residual_mask(wavelengths, data_spec_in, data_err, initial_inputs, poly_ord, linelist,
+                  velocities=np.arange(-25, 25, 0.82), pix_chunk=20, dev_perc=25, 
+                  tell_lines = [3820.33, 3933.66, 3968.47, 4327.74, 4307.90, 4383.55,
+                                4861.34, 5183.62, 5270.39, 5889.95, 5895.92, 6562.81,
+                                7593.70, 8226.96], n_sig=1, verbose=False):
 
     forward = model_func(initial_inputs, wavelengths)
 
-    a = 2/(np.max(wavelengths)-np.min(wavelengths))
-    b = 1 - a*np.max(wavelengths)
+    a = 2 / (np.max(wavelengths) - np.min(wavelengths))
+    b = 1 - a * np.max(wavelengths)
 
-    mdl1=0
-    for i in range(k_max,len(initial_inputs)-1):
-        mdl1 = mdl1 + (initial_inputs[i]*((wavelengths*a)+b)**(i-k_max))
+    mdl1 = 0
+    for i in range(k_max, len(initial_inputs) - 1):
+        mdl1 = mdl1 + (initial_inputs[i] * ((wavelengths * a) + b) ** (i - k_max))
 
     mdl1 = mdl1 * initial_inputs[-1]
 
-    residuals = (data_spec_in - np.min(data_spec_in))/(np.max(data_spec_in)-np.min(data_spec_in)) - (forward - np.min(forward))/(np.max(forward)-np.min(forward)) 
+    data_normalised = (data_spec_in - np.min(data_spec_in)) / (np.max(data_spec_in) - np.min(data_spec_in))
+    forward_normalised = (forward - np.min(forward)) / (np.max(forward) - np.min(forward))
+    residuals = data_normalised - forward_normalised
 
     data_err_compare = data_err.copy()
     
     ### finds consectuative sections where at least pix_chunk points have residuals greater than 0.25 - these are masked
-    idx = (abs(residuals)>dev_perc/100)
+    idx = (abs(residuals) > dev_perc / 100)
 
     flag_min = 0
     flag_max = 0
@@ -342,8 +362,8 @@ def residual_mask(wavelengths, data_spec_in, data_err, initial_inputs, poly_ord,
             flag_max = value
         elif idx[value] == True and flag_max < value:
             flag_max = value
-        elif idx[value] == False and flag_max-flag_min>=pix_chunk:
-            data_err[flag_min:flag_max]=10000000000000000000
+        elif idx[value] == False and flag_max - flag_min >= pix_chunk:
+            data_err[flag_min:flag_max] = 10000000000000000000
             flag_min = value
             flag_max = value
 
@@ -356,10 +376,10 @@ def residual_mask(wavelengths, data_spec_in, data_err, initial_inputs, poly_ord,
     ## masking tellurics
     for line in tell_lines:
         limit = (21/2.99792458e5)*line +3
-        idx = np.logical_and((line-limit)<=wavelengths, wavelengths<=(limit+line))
-        data_err[idx] = 1000000000000000000
+        idx = np.logical_and((line-limit) <= wavelengths, wavelengths <= (limit+line))
+        data_err[idx] = 10000000000000000000
 
-    residual_masks = tuple([data_err>=1000000000000000000])
+    residual_masks = tuple([data_err >= 10000000000000000000])
 
     ###################################
     ###      sigma clip masking     ###
@@ -369,19 +389,20 @@ def residual_mask(wavelengths, data_spec_in, data_err, initial_inputs, poly_ord,
     sigma = np.std(residuals)
     a = 1
 
-    upper_clip = m+a*sigma
-    lower_clip = m-a*sigma
+    upper_clip = m + a * sigma
+    lower_clip = m - a * sigma
 
     rcopy = residuals.copy()
 
-    idx1 = tuple([rcopy<=lower_clip])
-    idx2 = tuple([rcopy>=upper_clip])
+    idx1 = tuple([rcopy <= lower_clip])
+    idx2 = tuple([rcopy >= upper_clip])
 
-    data_err[idx1]=10000000000000000000
-    data_err[idx2]=10000000000000000000
+    data_err[idx1] = 10000000000000000000
+    data_err[idx2] = 10000000000000000000
 
-    poly_inputs, bin, bye, fit=continuumfit(data_spec_in,  (wavelengths*a)+b, data_err, poly_ord)
-    velocities1, profile, profile_err, alpha, continuum_waves, continuum_flux, no_line= LSD.LSD(wavelengths, bin, bye, linelist, 'False', poly_ord, 100, 30, run_name, velocities)
+    poly_inputs, bin, bye, fit = continuumfit(data_spec_in, (wavelengths * a) + b, data_err, poly_ord)
+    velocities1, profile, profile_err, alpha, continuum_waves, continuum_flux, no_line = LSD.LSD(
+        wavelengths, bin, bye, linelist, 'False', poly_ord, 100, 30, run_name, velocities)
 
     # ## comment if you would like to keep sigma clipping masking in for final LSD run 
     # residual_masks = tuple([data_err>=1000000000000000000])
@@ -430,7 +451,8 @@ def get_profiles(all_frames, order, poly_cos, continuum_error, counter):
         print('continuing... frame %s'%counter)
     
     else:
-        velocities1, profile1, profile_errors, alpha, continuum_waves, continuum_flux, no_line= LSD.LSD(wavelengths, flux, error, linelist, 'False', poly_ord, sn, 10, 'test', velocities)
+        velocities1, profile1, profile_errors, alpha, continuum_waves, continuum_flux, no_line= LSD.LSD(
+            wavelengths, flux, error, linelist, 'False', poly_ord, sn, 10, 'test', velocities)
 
         p = np.exp(profile1)-1
 
@@ -473,7 +495,7 @@ def combineprofiles(spectra, errors):
     spectrum = np.zeros((1,width))
     spec_errors = np.zeros((1,width))
 
-    for n in range(0,width):
+    for n in range(0, width):
         temp_spec = spectra_to_combine[:, n]
         spectrum[0,n]=sum(weights*temp_spec)/sum(weights)
         spec_errors[0,n]=(stdev(temp_spec)**2)*np.sqrt(sum(weights**2))
@@ -483,7 +505,12 @@ def combineprofiles(spectra, errors):
 
     return  spectrum, spec_errors
 
-def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sns, vgrid, all_frames='default', poly_or=3, pix_chunk = 20, dev_perc = 25, n_sig=1, telluric_lines = [3820.33, 3933.66, 3968.47, 4327.74, 4307.90, 4383.55, 4861.34, 5183.62, 5270.39, 5889.95, 5895.92, 6562.81, 7593.70, 8226.96], order = 0):
+def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sns,
+         vgrid, all_frames='default', poly_or=3, pix_chunk=20, dev_perc=25,
+         n_sig=1, telluric_lines=[3820.33, 3933.66, 3968.47, 4327.74, 4307.90,
+                                  4383.55, 4861.34, 5183.62, 5270.39, 5889.95,
+                                  5895.92, 6562.81, 7593.70, 8226.96],
+         order=0, verbose=True, parallel=False, cores=None):
     """Accurate Continuum fItting and Deconvolution
 
     Fits the continuum of the given spectra and performs LSD on the continuum corrected spectra, returning an LSD profile for each spectrum given. 
@@ -506,10 +533,12 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
 
     Returns:
         array: Resulting profiles and errors for spectra.
-    """ 
-    print('Initialising...')
+    """
 
-    t0 = time.time()
+    # TODO: Remove list requirements for inputs
+    if verbose:
+        print('Initialising...')
+        t0 = time.time()
 
     global velocities
     velocities = vgrid.copy()
@@ -528,8 +557,8 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     frame_errors = np.array(input_spectral_errors)
     sns = np.array(frame_sns)
 
-    if type(all_frames)!=np.ndarray:
-        if all_frames=='default':
+    if type(all_frames) != np.ndarray:
+        if all_frames == 'default':
             all_frames = np.zeros((len(frames), 1, 2, len(velocities)))
 
     fw = frame_wavelengths.copy()
@@ -542,54 +571,64 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     else: wavelengths, fluxes, flux_error_order, sn = fw[0], f[0], fe[0], s[0]
 
     ### getting the initial polynomial coefficents
-    a = 2/(np.max(wavelengths)-np.min(wavelengths))
-    b = 1 - a*np.max(wavelengths)
-    poly_inputs, fluxes1, flux_error_order1, fit = continuumfit(fluxes,  (wavelengths*a)+b, flux_error_order, poly_ord)
+    a = 2 / (np.max(wavelengths)-np.min(wavelengths))
+    b = 1 - a * np.max(wavelengths)
+    poly_inputs, fluxes1, flux_error_order1, fit = continuumfit(
+        fluxes, (wavelengths*a)+b, flux_error_order, poly_ord)
 
-    # t2 = time.time()
-    # print('Set up before LSD %s'%(t2-t0))
+    if verbose:
+        t2 = time.time()
+        print('Set up before LSD %s'%(t2-t0))
+
     #### getting the initial profile
     global alpha
-    velocities, profile, profile_errors, alpha, continuum_waves, continuum_flux, no_line= LSD.LSD(wavelengths, fluxes1, flux_error_order1, linelist, 'False', poly_ord, sn, 30, run_name, velocities)
+    velocities, profile, profile_errors, alpha, continuum_waves, continuum_flux, no_line = LSD.LSD(
+        wavelengths, fluxes1, flux_error_order1, linelist, 'False', poly_ord, sn, 30, run_name,
+        velocities, verbose=verbose)
 
-    # t3 = time.time()
-    # print('LSD run takes: %s'%(t3-t2))
+    if verbose:
+        t3 = time.time()
+        print('LSD run takes: %s'%(t3-t2))
 
     ## Setting the number of points in vgrid (k_max)
     global k_max
     k_max = len(profile)
     model_inputs = np.concatenate((profile, poly_inputs))
 
-    ## setting x, y, yerr for emcee
+    ## Setting x, y, yerr for emcee
     x = wavelengths
     y = fluxes
     yerr = flux_error_order
 
-    ## setting these normalisation factors as global variables - used in the figures below
-    a = 2/(np.max(x)-np.min(x))
-    b = 1 - a*np.max(x)
+    ## Setting these normalisation factors as global variables - used in the figures below
+    a = 2 / (np.max(x) - np.min(x))
+    b = 1 - a * np.max(x)
 
-    #masking based off residuals
+    # Masking based off residuals
     global mask_idx
     
-    yerr, model_inputs_resi, mask_idx = residual_mask(x, y, yerr, model_inputs, poly_ord, linelist, pix_chunk=pix_chunk, dev_perc=dev_perc, tell_lines = telluric_lines, n_sig=n_sig)
+    yerr, model_inputs_resi, mask_idx = residual_mask(x, y, yerr, model_inputs, poly_ord,
+                                                      linelist, pix_chunk=pix_chunk,
+                                                      dev_perc=dev_perc, tell_lines=telluric_lines,
+                                                      n_sig=n_sig, verbose=verbose)
 
-    # t4 = time.time()
-    # print('residual masking takes: %s' %(t4-t3))
+    if verbose:
+        t4 = time.time()
+        print('residual masking takes: %s' %(t4-t3))
 
-    ## setting number of walkers and their start values(pos)
+    ## Setting number of walkers and their start values(pos)
     ndim = len(model_inputs)
-    nwalkers= ndim*3
+    nwalkers = ndim * 3
     rng = np.random.default_rng()
 
-    ### starting values of walkers with indpendent variation
-    sigma = 0.8*0.005
+    ### starting values of walkers with independent variation
+    sigma = 0.8 * 0.005
     pos = []
     for i in range(0, ndim):
-        if i <ndim-poly_ord-2:
+        if i < ndim - poly_ord - 2:
             pos2 = rng.normal(model_inputs[i], sigma, (nwalkers, ))
         else:
-            sigma = abs(round_sig(model_inputs[i], 1))/10
+            sigma = abs(round_sig(model_inputs[i], 1)) / 10
             pos2 = rng.normal(model_inputs[i], sigma, (nwalkers, ))
         pos.append(pos2)
 
@@ -599,17 +638,40 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     ## the number of steps is how long it runs for - if it doesn't look like it's settling at a value try increasing the number of steps
     steps_no = 8000
 
-    t1 = time.time()
-    # print('MCMC set up takes: %s'%(t1-t4))
-    # print('Initialised in %ss'%round((t1-t0), 2))
+    if verbose:
+        t5 = time.time()
+        print('MCMC set up takes: %s'%(t5-t4))
+        print('Initialised in %ss'%round((t5-t0), 2))
 
     print('Fitting the Continuum...')
-    # sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr))
-    # sampler.run_mcmc(pos, steps_no, progress=True)
 
-    with Pool() as pool:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr), pool=pool)
+    if parallel:
+
+        # Choose a sensible number of workers
+        if cores is None:
+            cores = int(max(1, os.cpu_count()/2))  # Use half of the available cores
+        
+        if verbose:
+            print(f"Using {cores} out of {os.cpu_count()} cores for MCMC")
+
+        # Safe start for multiprocessing on all platforms
+        ctx = mp.get_context("spawn")
+
+        with ctx.Pool(processes=cores) as pool:
+            sampler = emcee.EnsembleSampler(
+                nwalkers, ndim, log_probability, args=(x, y, yerr), pool=pool
+            )
+            sampler.run_mcmc(pos, steps_no, progress=True)
+        
+        # with Pool() as pool: # Original code
+        #         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr), pool=pool)
+        #         sampler.run_mcmc(pos, steps_no, progress=True)
+
+    else:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr))
         sampler.run_mcmc(pos, steps_no, progress=True)
+
+    print('MCMC run takes: %s'%(time.time()-t5))
 
     ## discarding all vales except the last 1000 steps.
     dis_no = int(np.floor(steps_no-1000))
@@ -840,7 +902,8 @@ def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), s
             profile_err = all_frames[frame_no, order-min(order_range), 1]
 
             hdu.append(fits.PrimaryHDU(data = [profile, profile_err], header = hdr))
-            if save_path!='no save':
+            if save_path != 'no save':
+                month = 'August2007'
                 hdu.writeto('%s%s_%s_%s.fits'%(save_path, month, frame_no, run_name), output_verify = 'fix', overwrite = 'True')
 
         result1, result2 = combineprofiles(all_frames[frame_no, :, 0], all_frames[frame_no, :, 1])

@@ -1,8 +1,12 @@
 .vscode/
 *.png
 *.gif
-__pycache__/
+__pycache__*/
 .DS_Store
+*.pyc
+*.pyo
+*.pyd
+test.py
 
 # Distribution / packaging
 .Python
