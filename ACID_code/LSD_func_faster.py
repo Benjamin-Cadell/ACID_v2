@@ -1,13 +1,13 @@
 import numpy as np
 from scipy import linalg
 from astropy.io import  fits
-import glob
+import glob, time, warnings, sys, psutil
+import scipy.constants as const
 import matplotlib.pyplot as plt
-import time
 from scipy.signal import find_peaks
 from scipy.interpolate import interp1d, LSQUnivariateSpline
-import warnings
 from tqdm import tqdm
+ckms = float(const.c/1e3)  # speed of light in km/s
 
 def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn, 
         order, run_name, velocities, verbose=False):
@@ -15,88 +15,104 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn,
     t0 = time.time()
 
     #idx = tuple([flux_obs>0])
-    # in optical depth space
+    # Converting to optical depth space
     rms = rms / flux_obs
     flux_obs = np.log(flux_obs)
 
     deltav = velocities[1] - velocities[0]
 
     #### This is the EXPECTED linelist (for a slow rotator of the same spectral type) ####
+    # Ben - Reading the linelist
     linelist_expected = np.genfromtxt('%s'%linelist, skip_header=4, delimiter=',', usecols=(1,9))
-    wavelengths_expected1 = np.array(linelist_expected[:,0])
-    depths_expected1 = np.array(linelist_expected[:,1])
+    wavelengths_expected_all = np.array(linelist_expected[:,0])
+    depths_expected_all = np.array(linelist_expected[:,1])
 
+    # Selecting lines within the wavelength range of the observed spectrum
     wavelength_min = np.min(wavelengths)
     wavelength_max = np.max(wavelengths)
+    idx = np.logical_and(wavelengths_expected_all >= wavelength_min,
+                         wavelengths_expected_all <= wavelength_max)
+    wavelengths_expected = wavelengths_expected_all[idx]
+    depths_expected = depths_expected_all[idx]
 
-    idx = np.logical_and(wavelengths_expected1 >= wavelength_min,
-                         wavelengths_expected1 <= wavelength_max)
-    wavelengths_expected = wavelengths_expected1[idx]
-    depths_expected = depths_expected1[idx]
-
+    # Selecting lines deeper than 1/(3*sn)
     line_min = 1 / (3 * sn)
     idx = (depths_expected >= line_min)
     wavelengths_expected = wavelengths_expected[idx]
     depths_expected = depths_expected[idx]
     no_line = len(depths_expected)
     
+    # Converting to log space for depths
     depths_expected = -np.log(1-depths_expected)
 
     blankwaves = wavelengths
     R_matrix = flux_obs
 
-    # if verbose:
-    #     t1 = time.time()
-    #     print('Time for part 1: %s'%(t1-t0))
-
-    # Calculate vdiff for all combinations of blankwaves and wavelengths_expected
-    vdiff = ((blankwaves[:, np.newaxis] - wavelengths_expected) * 2.99792458e5) / wavelengths_expected
-
-    # Create masks for vdiff that satisfy velocity range conditions
-    velocity_mask = np.logical_and(vdiff <= (np.max(velocities) + deltav), vdiff >= (np.min(velocities) - deltav))
-
     # Find differences and velocities
     diff = blankwaves[:, np.newaxis] - wavelengths_expected
-    vel = 2.99792458e5 * (diff / wavelengths_expected)
+    vel = ckms * (diff / wavelengths_expected)
 
-    # Calculate x and delta_x for valid velocities
-    # if verbose:
-    #     print(f"Number of wavelength ranges: {len(wavelengths)}")
-
-    if len(wavelengths) <= 3000:
+    # We can calculate the alpha matrix in one pass if the number of wavelengths is small enough
+    
+    # Note this used to be "if len(wavelengths)<6000", which I believe is way too high
+    # for 16GB RAM. With testing, I found that if the matrix was half the available memory,
+    # it would always be fast, otherwise seperate into blocks as the else statment below.
+    m_size = len(wavelengths_expected) * len(velocities) * len(wavelengths) * 8 * 1e-9 # Matrix size in GB
+    m_available = psutil.virtual_memory().available * 1e-9
+    if m_size < m_available / 2:
+        
         x = (vel[:, :, np.newaxis] - velocities) / deltav
-        alpha_mask_1 = np.logical_and(-1. < x, x < 0.)
-        alpha_mask_2 = np.logical_and(0. <= x, x < 1.)
-        delta_x_1 = 1 + x
-        delta_x_2 = 1 - x
-        delta_x_1[alpha_mask_1==False] = 0
-        delta_x_2[alpha_mask_2==False] = 0
+        delta = np.clip(1.0 - np.abs(x), 0.0, 1.0)
+        alpha = (depths_expected[:, None] * delta).sum(axis=1)  # (nb, n_vel)
 
-        # Update alpha array using calculated delta_x values
-        alpha = np.zeros((len(blankwaves), len(velocities)))
-        alpha += (depths_expected[:, np.newaxis] * delta_x_1).sum(axis=1)
-        alpha += (depths_expected[:, np.newaxis] * delta_x_2).sum(axis=1)
+        # The below was simplified using np.clip (as shown above)
+        # alpha_mask_1 = np.logical_and(-1. < x, x < 0.)
+        # alpha_mask_2 = np.logical_and(0. <= x, x < 1.)
+        # delta_x_1 = 1 + x
+        # delta_x_2 = 1 - x
+        # delta_x_1[alpha_mask_1==False] = 0
+        # delta_x_2[alpha_mask_2==False] = 0
+        # # Update alpha array using calculated delta_x values
+        # alpha = np.zeros((len(blankwaves), len(velocities)))
+        # alpha += (depths_expected[:, np.newaxis] * delta_x_1).sum(axis=1)
+        # alpha += (depths_expected[:, np.newaxis] * delta_x_2).sum(axis=1)
 
     else:
-        warnings.warn('Large wavelength ranges give large computation time. Seperate wavelength range into smaller chunks for faster computation.', DeprecationWarning, stacklevel=2)
-        alpha = np.zeros((len(blankwaves), len(velocities)))
+        block = 512 # 512 after initial testing is a good compromise between memory use and speed
+        alpha  = np.zeros((len(blankwaves), len(velocities)), dtype=np.float64)
+        for start_pos in tqdm(range(0, len(wavelengths_expected), block), desc='Calculating alpha matrix'):
+            end_pos = min(start_pos + block, len(wavelengths_expected)) # ensure we don't go out of bounds
+            wl  = wavelengths_expected[start_pos:end_pos]
+            dep = depths_expected[start_pos:end_pos]
 
-        for j in tqdm(range(0, len(blankwaves)), desc='Calculating alpha'):
-            for i in (range(0, len(wavelengths_expected))):
-                vdiff = ((blankwaves[j] - wavelengths_expected[i]) * 2.99792458e5) / wavelengths_expected[i]
-                if vdiff <= (np.max(velocities) + deltav) and vdiff >= (np.min(velocities) - deltav):
-                    diff = blankwaves[j] - wavelengths_expected[i]
-                    vel = 2.99792458e5 * (diff / wavelengths_expected[i])
-                    for k in range(0, len(velocities)):
-                        x = (velocities[k] - vel) / deltav
-                        if -1. < x and x < 0.:
-                            delta_x = (1 + x)
-                            alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
-                        elif 0. <= x and x < 1.:
-                            delta_x = (1 - x)
-                            alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
-                else:
-                    pass
+            vel_blk = ckms * (blankwaves[:, None] - wl) / wl
+            x_blk   = (vel_blk[:, :, None] - velocities) / deltav
+            delta   = np.clip(1.0 - np.abs(x_blk), 0.0, 1.0)                    
+
+            alpha += (dep[:, None] * delta).sum(axis=1)
+
+    # The below I think works similarly to above, but but uses only for loops, rather then using a for loop
+    # that only involves numpy calculations. With testing, the above is much faster.
+    # else:
+    #     warnings.warn('Large wavelength ranges give large computation time. Seperate wavelength range into smaller chunks for faster computation.', DeprecationWarning, stacklevel=2)
+    #     alpha = np.zeros((len(blankwaves), len(velocities)))
+
+    #     for j in tqdm(range(0, len(blankwaves)), desc='Calculating alpha matrix'):
+    #         for i in (range(0, len(wavelengths_expected))):
+    #             vdiff = ((blankwaves[j] - wavelengths_expected[i]) * ckms) / wavelengths_expected[i]
+    #             if vdiff <= (np.max(velocities) + deltav) and vdiff >= (np.min(velocities) - deltav):
+    #                 diff = blankwaves[j] - wavelengths_expected[i]
+    #                 vel = const.c / 1e3 * (diff / wavelengths_expected[i])
+    #                 for k in range(0, len(velocities)):
+    #                     x = (velocities[k] - vel) / deltav
+    #                     if -1. < x and x < 0.:
+    #                         delta_x = (1 + x)
+    #                         alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
+    #                     elif 0. <= x and x < 1.:
+    #                         delta_x = (1 - x)
+    #                         alpha[j, k] = alpha[j, k] + depths_expected[i] * delta_x
+    #             else:
+    #                 pass
 
     id_matrix = np.identity(len(flux_obs))
     S_matrix = (1/rms) * id_matrix
@@ -122,7 +138,7 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn,
     profile_errors_squared = np.diagonal(LHS_final)
     profile_errors = np.sqrt(profile_errors_squared)
 
-    return velocities, profile, profile_errors, alpha, wavelengths_expected, depths_expected1, no_line
+    return velocities, profile, profile_errors, alpha, wavelengths_expected, depths_expected_all, no_line
 
 def get_wave(data,header):
 
@@ -156,7 +172,7 @@ def continuumfit(wavelengths1, fluxes1, poly_ord):
         fluxe = fluxes[idx]
         clipped_flux = []
         clipped_waves = []
-        binsize =100
+        binsize = 100
         for i in range(0, len(wavelength), binsize):
             waves = wavelength[i:i+binsize]
             flux = fluxe[i:i+binsize]

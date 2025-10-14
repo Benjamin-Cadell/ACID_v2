@@ -1,10 +1,11 @@
 #%%
 from astropy.io import fits
+import importlib, os
+import multiprocessing as mp
 import ACID as acid
+importlib.reload(acid)
 import numpy as np
 import matplotlib.pyplot as plt
-import importlib
-importlib.reload(acid) # For interactive (ipython) use only
 
 spec_file = fits.open('../example/sample_spec_1.fits')
 
@@ -20,7 +21,8 @@ deltav = 0.82   # velocity pixel size must not be smaller than the spectral pixe
 velocities = np.arange(-25, 25, deltav)
 
 # run ACID function
-result = acid.ACID([wavelength], [spectrum], [error], linelist, [sn], velocities, parallel=True)
+result = acid.ACID([wavelength], [spectrum], [error], linelist, [sn], velocities,
+                   parallel=True, cores=None, nsteps=4000, verbose=True)
 
 # extract profile and errors
 profile = result[0, 0, 0]
@@ -32,4 +34,3 @@ plt.errorbar(velocities, profile, profile_error)
 plt.xlabel('Velocities (km/s)')
 plt.ylabel('Flux')
 plt.show()
-# %%

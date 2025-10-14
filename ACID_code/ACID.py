@@ -1,23 +1,29 @@
-import sys, emcee, warnings, sys, os, glob, time, importlib
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+import sys, emcee, warnings, os, glob, time, importlib
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from astropy.io import fits
-import ACID_code.LSD_func_faster as LSD
 from scipy.interpolate import interp1d
 from scipy.signal import find_peaks
 import multiprocessing as mp
 from functools import partial
 from multiprocessing import Pool
 from statistics import stdev
-from tqdm import tqdm
 from math import log10, floor
+
+try:
+    from . import utils
+except Exception:
+    import utils
+
+try:
+    from . import LSD_func_faster as LSD
+except Exception:
+    import LSD_func_faster as LSD
+
 warnings.filterwarnings("ignore")
-importlib.reload(LSD) # For interactive (ipython) use only
+importlib.reload(LSD)
+importlib.reload(utils)
 
 def round_sig(x1, sig):
     return round(x1, sig-int(floor(log10(abs(x1))))-1)
@@ -80,7 +86,8 @@ def read_in_frames(order, filelist, file_type):
     
     # read in first frame
     directory = '/Users/lucydolan/Starbase/HD189733 old/HD189733/' # Ben - Not sure why this needed to be manually added
-    fluxes, wavelengths, flux_error_order, sn, mid_wave_order, telluric_spec, overlap = LSD.blaze_correct(file_type, 'order', order, filelist[0], directory, 'unmasked', run_name, 'y')
+    fluxes, wavelengths, flux_error_order, sn, mid_wave_order, telluric_spec, overlap = LSD.blaze_correct(
+        file_type, 'order', order, filelist[0], directory, 'unmasked', run_name, 'y')
     
     frames = np.zeros((len(filelist), len(wavelengths)))
     errors = np.zeros((len(filelist), len(wavelengths)))
@@ -171,7 +178,7 @@ def calc_deltav(wavelengths):
 def combine_spec(wavelengths_f, spectra_f, errors_f, sns_f):
 
     interp_spec = np.zeros(spectra_f.shape)
-    #combine all spectra to one spectrum
+    # combine all spectra to one spectrum
     for n in range(len(wavelengths_f)):
 
         global reference_wave
@@ -288,10 +295,8 @@ def log_likelihood(theta, x, y, yerr):
 
 ## imposes the prior restrictions on the inputs - rejects if profile point is less than -10 or greater than 0.5.
 def log_prior(theta):
-
     check = 0
     z = theta[:k_max]
-
 
     for i in range(len(theta)):
         if i < k_max: ## must lie in z
@@ -312,6 +317,7 @@ def log_prior(theta):
                 v_cont.append(velocities[i])
 
         z_cont = np.array(z_cont)
+        v_cont = np.array(v_cont)
 
         p_pent = np.sum((np.log((1/np.sqrt(2*np.pi*0.01**2)))-0.5*(z_cont/0.01)**2))
 
@@ -320,7 +326,7 @@ def log_prior(theta):
     return -np.inf
 
 ## calculates log probability - used for mcmc
-def log_probability(theta, x, y, yerr):
+def log_probability(theta):
     lp = log_prior(theta)
     if not np.isfinite(lp):
         return -np.inf
@@ -507,10 +513,8 @@ def combineprofiles(spectra, errors):
 
 def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sns,
          vgrid, all_frames='default', poly_or=3, pix_chunk=20, dev_perc=25,
-         n_sig=1, telluric_lines=[3820.33, 3933.66, 3968.47, 4327.74, 4307.90,
-                                  4383.55, 4861.34, 5183.62, 5270.39, 5889.95,
-                                  5895.92, 6562.81, 7593.70, 8226.96],
-         order=0, verbose=True, parallel=False, cores=None):
+         n_sig=1, telluric_lines=None, order=0, verbose=True, parallel=False, cores=None,
+         nsteps=8000):
     """Accurate Continuum fItting and Deconvolution
 
     Fits the continuum of the given spectra and performs LSD on the continuum corrected spectra, returning an LSD profile for each spectrum given. 
@@ -530,15 +534,26 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
         n_sig (int, optional): Number of sigma to clip in sigma clipping. Ill fitting lines are identified by sigma-clipping the residuals between an inital model and the data. The regions that are clipped from the residuals will be masked in the spectra. This masking is only applied to find the continuum fit and is removed when LSD is applied to obtain the final profiles. 
         telluric_lines (list, optional): List of wavelengths (in Angstroms) of telluric lines to be masked. This can also include problematic lines/features that should be masked also. For each wavelengths in the list ~3Å eith side of the line is masked.
         order (int, optional): Only applicable if an all_frames output array has been provided as this is the order position in that array where the result should be input. i.e. if order = 5 the output profile and errors would be inserted in all_frames[:, 5].
-
+        verbose (bool, optional): If True prints out time taken for each section of the code.
+        parallel (bool, optional): If True uses multiprocessing to calculate the profiles for each frame in parallel.
+        cores (int, optional): Number of cores to use if parallel=True. If None all available cores will be used.
+        nsteps (int, optional): Number of steps for the MCMC to run, try increasing if it doesn't converge, defaults is 8000.
     Returns:
         array: Resulting profiles and errors for spectra.
     """
 
-    # TODO: Remove list requirements for inputs
-    if verbose:
-        print('Initialising...')
-        t0 = time.time()
+    ### Setup
+
+    # Ensure inputs are lists, np.arrays are converted to lists
+    input_wavelengths, input_spectra, input_spectral_errors, frame_sns = [
+        utils.ensure_list(v) for v in (input_wavelengths, input_spectra, input_spectral_errors, frame_sns)]
+
+    # Define tell_lines if not input, check type if it is
+    if telluric_lines is None:
+        telluric_lines = [3820.33, 3933.66, 3968.47, 4327.74, 4307.90, 4383.55, 4861.34,
+                          5183.62, 5270.39, 5889.95, 5895.92, 6562.81, 7593.70, 8226.96]
+    elif not (isinstance(telluric_lines, list) or isinstance(telluric_lines, int)):
+        raise TypeError("telluric_lines must be a list or integer")
 
     global velocities
     velocities = vgrid.copy()
@@ -547,7 +562,6 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     global poly_ord
     poly_ord = poly_or
 
-    ## combines spectra from each frame (weighted based of S/N), returns to S/N of combined spec
     global frames
     global frame_wavelengths
     global frame_errors
@@ -565,10 +579,16 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     f = frames.copy()
     fe = frame_errors.copy()
     s = sns.copy()
-    
+
+    if verbose:
+        t0 = time.time()
+        print('Initialising...')
+
+    ## combines spectra from each frame (weighted based of S/N), returns to S/N of combined spec
     if len(fw)>1:
         wavelengths, fluxes, flux_error_order, sn = combine_spec(fw, f, fe, s)
-    else: wavelengths, fluxes, flux_error_order, sn = fw[0], f[0], fe[0], s[0]
+    else:
+        wavelengths, fluxes, flux_error_order, sn = fw[0], f[0], fe[0], s[0]
 
     ### getting the initial polynomial coefficents
     a = 2 / (np.max(wavelengths)-np.min(wavelengths))
@@ -596,6 +616,7 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     model_inputs = np.concatenate((profile, poly_inputs))
 
     ## Setting x, y, yerr for emcee
+    global x, y, yerr
     x = wavelengths
     y = fluxes
     yerr = flux_error_order
@@ -635,46 +656,50 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     pos = np.array(pos)
     pos = np.transpose(pos)
 
-    ## the number of steps is how long it runs for - if it doesn't look like it's settling at a value try increasing the number of steps
-    steps_no = 8000
-
     if verbose:
         t5 = time.time()
         print('MCMC set up takes: %s'%(t5-t4))
         print('Initialised in %ss'%round((t5-t0), 2))
 
-    print('Fitting the Continuum...')
+    print('Fitting the continuum using emcee...')
 
     if parallel:
 
         # Choose a sensible number of workers
         if cores is None:
-            cores = int(max(1, os.cpu_count()/2))  # Use half of the available cores
-        
+            cores = os.cpu_count()  # Use all available cores
+
         if verbose:
             print(f"Using {cores} out of {os.cpu_count()} cores for MCMC")
 
-        # Safe start for multiprocessing on all platforms
-        ctx = mp.get_context("spawn")
+        # For some reason, unspecified pooling as was before (as in case of windows in the else statement)
+        # leds to a hung computer. So specify mp.get_context required, default is spawn, but spawn
+        # causes multiple instances of this script to rerun, causing alpha matrix calculation to be redone
+        # in each child process. Therefore, fork, which is legacy mp behavior on unix, is used.
+        if sys.platform != "win32":
+            ctx = mp.get_context("fork")
+            with ctx.Pool(processes = cores) as pool:
+                sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool)
+                sampler.run_mcmc(pos, nsteps, progress=True, store=True)
 
-        with ctx.Pool(processes=cores) as pool:
-            sampler = emcee.EnsembleSampler(
-                nwalkers, ndim, log_probability, args=(x, y, yerr), pool=pool
-            )
-            sampler.run_mcmc(pos, steps_no, progress=True)
+            # with Pool() as pool: # Original code
+            #         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool)
+            #         sampler.run_mcmc(pos, nsteps, progress=True)
         
-        # with Pool() as pool: # Original code
-        #         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr), pool=pool)
-        #         sampler.run_mcmc(pos, steps_no, progress=True)
+        else: # untested
+            with Pool() as pool:
+                sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool)
+                sampler.run_mcmc(pos, nsteps, progress=True)
+
 
     else:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(x, y, yerr))
-        sampler.run_mcmc(pos, steps_no, progress=True)
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
+        sampler.run_mcmc(pos, nsteps, progress=True)
 
     print('MCMC run takes: %s'%(time.time()-t5))
 
     ## discarding all vales except the last 1000 steps.
-    dis_no = int(np.floor(steps_no-1000))
+    dis_no = int(np.floor(nsteps-1000))
 
     global flat_samples
     ## combining all walkers together
