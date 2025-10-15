@@ -1,5 +1,5 @@
 from astropy.io import fits
-import ACID_code.ACID as acid
+import ACID_code_v2.ACID as acid
 import numpy as np
 import matplotlib.pyplot as plt
 import glob

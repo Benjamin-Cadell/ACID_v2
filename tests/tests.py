@@ -1,9 +1,14 @@
 #%%
 from astropy.io import fits
 import os
-os.chdir(os.path.dirname(__file__))
-os.chdir("..")
-import ACID_code.ACID as acid
+
+try:
+    import ACID_code_v2 as acid
+except ImportError:
+    os.chdir(os.path.dirname(__file__))
+    os.chdir("..")
+    import ACID_code_v2 as acid
+
 import numpy as np
 import matplotlib.pyplot as plt
 import glob, importlib

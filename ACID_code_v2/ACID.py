@@ -8,7 +8,6 @@ from scipy.signal import find_peaks
 import multiprocessing as mp
 from functools import partial
 from multiprocessing import Pool
-from statistics import stdev
 from math import log10, floor
 
 try:
@@ -504,7 +503,7 @@ def combineprofiles(spectra, errors):
     for n in range(0, width):
         temp_spec = spectra_to_combine[:, n]
         spectrum[0,n]=sum(weights*temp_spec)/sum(weights)
-        spec_errors[0,n]=(stdev(temp_spec)**2)*np.sqrt(sum(weights**2))
+        spec_errors[0,n] = (np.std(temp_spec, ddof=1)**2) * np.sqrt(sum(weights**2))
 
     spectrum = list(np.reshape(spectrum, (width,)))
     spec_errors = list(np.reshape(spec_errors, (width,)))
