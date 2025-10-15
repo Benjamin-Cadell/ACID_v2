@@ -9,16 +9,7 @@ import multiprocessing as mp
 from functools import partial
 from multiprocessing import Pool
 from math import log10, floor
-
-try:
-    from . import utils
-except Exception:
-    import utils
-
-try:
-    from . import LSD_func_faster as LSD
-except Exception:
-    import LSD_func_faster as LSD
+import LSD, utils
 
 warnings.filterwarnings("ignore")
 importlib.reload(LSD)
@@ -595,9 +586,9 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     poly_inputs, fluxes1, flux_error_order1, fit = continuumfit(
         fluxes, (wavelengths*a)+b, flux_error_order, poly_ord)
 
-    if verbose:
-        t2 = time.time()
-        print('Set up before LSD %s'%(t2-t0))
+    # if verbose:
+    #     t2 = time.time()
+    #     print('Set up before LSD %s'%(t2-t0))
 
     #### getting the initial profile
     global alpha
@@ -605,9 +596,9 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
         wavelengths, fluxes1, flux_error_order1, linelist, 'False', poly_ord, sn, 30, run_name,
         velocities, verbose=verbose)
 
-    if verbose:
-        t3 = time.time()
-        print('LSD run takes: %s'%(t3-t2))
+    # if verbose:
+    #     t3 = time.time()
+    #     print('LSD run takes: %s'%(t3-t2))
 
     ## Setting the number of points in vgrid (k_max)
     global k_max
@@ -627,14 +618,16 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     # Masking based off residuals
     global mask_idx
     
+    if verbose:
+        print('Residual masking...')
     yerr, model_inputs_resi, mask_idx = residual_mask(x, y, yerr, model_inputs, poly_ord,
                                                       linelist, pix_chunk=pix_chunk,
                                                       dev_perc=dev_perc, tell_lines=telluric_lines,
                                                       n_sig=n_sig, verbose=verbose)
 
-    if verbose:
-        t4 = time.time()
-        print('residual masking takes: %s' %(t4-t3))
+    # if verbose:
+    #     t4 = time.time()
+    #     print('residual masking takes: %s' %(t4-t3))
 
     ## Setting number of walkers and their start values(pos)
     ndim = len(model_inputs)
@@ -657,7 +650,7 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
 
     if verbose:
         t5 = time.time()
-        print('MCMC set up takes: %s'%(t5-t4))
+        # print('MCMC set up takes: %s'%(t5-t4))
         print('Initialised in %ss'%round((t5-t0), 2))
 
     print('Fitting the continuum using emcee...')

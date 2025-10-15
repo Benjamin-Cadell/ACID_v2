@@ -2,19 +2,22 @@
 from astropy.io import fits
 import importlib, os
 import multiprocessing as mp
-import ACID_code_v2 as acid
-importlib.reload(acid)
 import numpy as np
 import matplotlib.pyplot as plt
+os.chdir(os.path.dirname(__file__))
+os.chdir("../") # ensures we are in the main directory
+import ACID_code_v2 as acid
+importlib.reload(acid)
+os.chdir("example") # change to example directory
 
-spec_file = fits.open('../example/sample_spec_1.fits')
+spec_file = fits.open('sample_spec_1.fits')
 
 wavelength = spec_file[0].data   # Wavelengths in Angstroms
 spectrum = spec_file[1].data     # Spectral Flux
 error = spec_file[2].data        # Spectral Flux Errors
 sn = spec_file[3].data           # SN of Spectrum
 
-linelist = '../example/example_linelist.txt' # Insert path to line list
+linelist = 'example_linelist.txt' # Insert path to line list
 
 # choose a velocity grid for the final profile(s)
 deltav = 0.82   # velocity pixel size must not be smaller than the spectral pixel size

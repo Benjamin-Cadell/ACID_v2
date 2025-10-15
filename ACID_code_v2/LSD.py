@@ -81,8 +81,12 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn,
     else:
         block = 512 # after initial testing, this value is a good compromise between memory use and speed
         alpha  = np.zeros((len(blankwaves), len(velocities)), dtype=np.float64)
-        for start_pos in tqdm(range(0, len(wavelengths_expected), block), desc='Calculating alpha matrix'):
-            end_pos = min(start_pos + block, len(wavelengths_expected)) # ensure we don't go out of bounds
+        if verbose:
+            iterable = tqdm(range(0, len(wavelengths_expected), block), desc='Calculating alpha matrix')
+        else:
+            iterable = range(0, len(wavelengths_expected), block)
+        for start_pos in iterable:
+            end_pos = min(start_pos + block, len(wavelengths_expected)) # ensure we don't go out of bounds on last iteration
             wl  = wavelengths_expected[start_pos:end_pos]
             dep = depths_expected[start_pos:end_pos]
 
