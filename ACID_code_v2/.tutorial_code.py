@@ -2,7 +2,7 @@
 from astropy.io import fits
 import importlib, os
 import multiprocessing as mp
-import ACID as acid
+import ACID_code_v2 as acid
 importlib.reload(acid)
 import numpy as np
 import matplotlib.pyplot as plt

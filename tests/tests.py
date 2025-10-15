@@ -1,17 +1,11 @@
 #%%
 from astropy.io import fits
-import os
-
-try:
-    import ACID_code_v2 as acid
-except ImportError:
-    os.chdir(os.path.dirname(__file__))
-    os.chdir("..")
-    import ACID_code_v2 as acid
-
+import os, glob, importlib
+os.chdir(os.path.dirname(__file__))
+os.chdir("..") # ensures we are in the main directory
+import ACID_code_v2 as acid
 import numpy as np
 import matplotlib.pyplot as plt
-import glob, importlib
 importlib.reload(acid)
 
 def test_run_e2ds():
@@ -20,12 +14,11 @@ def test_run_e2ds():
     linelist = 'example/example_linelist.txt'
     save_path = 'no save'
 
-
     velocities = np.arange(-25, 25, 0.82)
 
     # run ACID on e2ds files
-    ACID_results_e2ds = acid.ACID_HARPS(e2ds_files, linelist, vgrid = velocities, save_path = save_path, order_range = np.arange(41, 43))
-
+    ACID_results_e2ds = acid.ACID_HARPS(e2ds_files, linelist, vgrid = velocities, save_path = save_path,
+                                        order_range = np.arange(41, 43), nsteps=2000)
 
 def test_run_s1d():
 
@@ -36,7 +29,8 @@ def test_run_s1d():
     velocities = np.arange(-25, 25, 0.82)
 
     # run ACID on s1d files
-    ACID_results_s1d = acid.ACID_HARPS(s1d_files, linelist, vgrid = velocities, save_path = save_path, order_range = np.arange(41, 43), file_type = 's1d')
+    ACID_results_s1d = acid.ACID_HARPS(s1d_files, linelist, vgrid = velocities, save_path = save_path,
+                                       order_range = np.arange(41, 43), file_type = 's1d', nsteps=2000)
 
 test_run_e2ds()
 test_run_s1d()

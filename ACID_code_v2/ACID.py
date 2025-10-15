@@ -858,7 +858,9 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
 
     return all_frames
 
-def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), save_path = './', file_type = 'e2ds', pix_chunk = 20, dev_perc = 25, n_sig=1, telluric_lines = [3820.33, 3933.66, 3968.47, 4327.74, 4307.90, 4383.55, 4861.34, 5183.62, 5270.39, 5889.95, 5895.92, 6562.81, 7593.70, 8226.96]):
+def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), save_path = './', file_type = 'e2ds',
+               pix_chunk = 20, dev_perc = 25, n_sig=1, telluric_lines = None, **kwargs):
+
 
     """Accurate Continuum fItting and Deconvolution for HARPS e2ds and s1d spectra (DRS pipeline 3.5)
 
@@ -904,7 +906,8 @@ def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), s
 
         frame_wavelengths, frames, frame_errors, sns, telluric_spec = read_in_frames(order, filelist, file_type)
 
-        all_frames = ACID(frame_wavelengths, frames, frame_errors, linelist, sns, velocities, all_frames,  poly_or, pix_chunk, dev_perc, n_sig, telluric_lines, order = order-min(order_range))  
+        all_frames = ACID(frame_wavelengths, frames, frame_errors, linelist, sns, velocities, all_frames, poly_or,
+                          pix_chunk, dev_perc, n_sig, telluric_lines, order = order-min(order_range), **kwargs)
 
     # adding into fits files for each frame
     BJDs = []
