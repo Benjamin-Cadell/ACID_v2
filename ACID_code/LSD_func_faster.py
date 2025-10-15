@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy.interpolate import interp1d, LSQUnivariateSpline
 from tqdm import tqdm
+import os
 ckms = float(const.c/1e3)  # speed of light in km/s
 
 def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn, 
@@ -78,7 +79,7 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn,
         # alpha += (depths_expected[:, np.newaxis] * delta_x_2).sum(axis=1)
 
     else:
-        block = 512 # 512 after initial testing is a good compromise between memory use and speed
+        block = 512 # after initial testing, this value is a good compromise between memory use and speed
         alpha  = np.zeros((len(blankwaves), len(velocities)), dtype=np.float64)
         for start_pos in tqdm(range(0, len(wavelengths_expected), block), desc='Calculating alpha matrix'):
             end_pos = min(start_pos + block, len(wavelengths_expected)) # ensure we don't go out of bounds
@@ -142,7 +143,7 @@ def LSD(wavelengths, flux_obs, rms, linelist, adjust_continuum, poly_ord, sn,
 
 def get_wave(data,header):
 
-  wave=np.array(data*0., dtype = 'float128')
+  wave=np.array(data*0., dtype = 'longdouble')
   no=data.shape[0]
   npix=data.shape[1]
   d=header['ESO DRS CAL TH DEG LL']
@@ -150,12 +151,12 @@ def get_wave(data,header):
   xx=[]
   for i in range(d+1):
       xx.append(xx0**i)
-  xx=np.asarray(xx, dtype = 'float128')
+  xx=np.asarray(xx, dtype = 'longdouble')
 
   for o in range(no):
       for i in range(d+1):
           idx=i+o*(d+1)
-          par=np.float128(header['ESO DRS CAL TH COEFF LL%d' % idx])
+          par=np.longdouble(header['ESO DRS CAL TH COEFF LL%d' % idx])
           wave[o,:]=wave[o,:]+par*xx[i,:]
        #for x in range(npix):
        #  wave[o,x]=wave[o,x]+par*xx[i,x]#float(x)**float(i)
@@ -558,13 +559,13 @@ def blaze_correct(file_type, spec_type, order, file, directory, masking, run_nam
         '''
         # file_ccf = fits.open(file.replace('e2ds', 'ccf_G2'))
         # print(file_ccf[0].header['ESO DRS BERV'])
-        brv=np.float128(header['ESO DRS BERV'])
+        brv=np.longdouble(header['ESO DRS BERV'])
         # print(brv)
         wave_nonad=get_wave(spec, header)
         # if berv_opt == 'y':
         #     print('BERV corrected')
         wave = wave_nonad*(1.+brv/2.99792458e5)
-        wave = np.array(wave, dtype = 'float64')
+        wave = np.array(wave, dtype = 'double')
         # if berv_opt == 'n':
         #     print('BERV not corrected')
         # wave = wave_nonad
@@ -593,20 +594,25 @@ def blaze_correct(file_type, spec_type, order, file, directory, masking, run_nam
         plt.ylabel('flux')
         plt.show()
         '''
-        try:
-            blaze_file = glob.glob('./**blaze_A*.fits')
-            # print('%sblaze_folder/**blaze_A*.fits'%(directory))
-            # print(blaze_file)
-            blaze_file = blaze_file[0]
-        except: 
-            try:
-                blaze_file = glob.glob('/Users/lucydolan/Starbase/problem_frames/**blaze_A*.fits')
-                blaze_file = blaze_file[0]
-            except:
-                blaze_file = glob.glob('data/**blaze_A*.fits')
 
-        blaze =fits.open('%s'%blaze_file)
+        blaze_file = glob.glob('tests/data/*blaze_B*.fits')
+
+        blaze_file = blaze_file[0]
+        # try:
+        #     blaze_file = glob.glob('./**blaze_A*.fits')
+        #     # print('%sblaze_folder/**blaze_A*.fits'%(directory))
+        #     # print(blaze_file)
+        #     blaze_file = blaze_file[0]
+        # except: 
+        #     try:
+        #         blaze_file = glob.glob('/Users/lucydolan/Starbase/problem_frames/**blaze_A*.fits')
+        #         blaze_file = blaze_file[0]
+        #     except:
+        #         blaze_file = glob.glob('tests/data/**blaze_A*.fits')
+        blaze = fits.open('%s'%blaze_file)
         blaze_func = blaze[0].data
+        min_rows = min(spec.shape[0], blaze_func.shape[0], flux_error.shape[0])
+        spec, blaze_func, flux_error = spec[:min_rows], blaze_func[:min_rows], flux_error[:min_rows]
         spec = spec/blaze_func
         flux_error = flux_error/blaze_func
 

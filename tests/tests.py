@@ -1,8 +1,13 @@
+#%%
 from astropy.io import fits
+import os
+os.chdir(os.path.dirname(__file__))
+os.chdir("..")
 import ACID_code.ACID as acid
 import numpy as np
 import matplotlib.pyplot as plt
-import glob
+import glob, importlib
+importlib.reload(acid)
 
 def test_run_e2ds():
 
@@ -30,3 +35,4 @@ def test_run_s1d():
 
 test_run_e2ds()
 test_run_s1d()
+print("All tests passed!")

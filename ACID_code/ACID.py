@@ -513,7 +513,7 @@ def combineprofiles(spectra, errors):
 
 def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sns,
          vgrid, all_frames='default', poly_or=3, pix_chunk=20, dev_perc=25,
-         n_sig=1, telluric_lines=None, order=0, verbose=True, parallel=False, cores=None,
+         n_sig=1, telluric_lines=None, order=0, verbose=True, parallel=True, cores=None,
          nsteps=8000):
     """Accurate Continuum fItting and Deconvolution
 
@@ -534,9 +534,9 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
         n_sig (int, optional): Number of sigma to clip in sigma clipping. Ill fitting lines are identified by sigma-clipping the residuals between an inital model and the data. The regions that are clipped from the residuals will be masked in the spectra. This masking is only applied to find the continuum fit and is removed when LSD is applied to obtain the final profiles. 
         telluric_lines (list, optional): List of wavelengths (in Angstroms) of telluric lines to be masked. This can also include problematic lines/features that should be masked also. For each wavelengths in the list ~3Å eith side of the line is masked.
         order (int, optional): Only applicable if an all_frames output array has been provided as this is the order position in that array where the result should be input. i.e. if order = 5 the output profile and errors would be inserted in all_frames[:, 5].
-        verbose (bool, optional): If True prints out time taken for each section of the code.
-        parallel (bool, optional): If True uses multiprocessing to calculate the profiles for each frame in parallel.
-        cores (int, optional): Number of cores to use if parallel=True. If None all available cores will be used.
+        verbose (bool, optional): If True prints out time taken for each section of the code. Defaults to True.
+        parallel (bool, optional): If True uses multiprocessing to calculate the profiles for each frame in parallel. Defaults to True.
+        cores (int, optional): Number of cores to use if parallel=True. If None (default) all available cores will be used.
         nsteps (int, optional): Number of steps for the MCMC to run, try increasing if it doesn't converge, defaults is 8000.
     Returns:
         array: Resulting profiles and errors for spectra.
@@ -686,10 +686,10 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
             #         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool)
             #         sampler.run_mcmc(pos, nsteps, progress=True)
         
-        else: # untested
+        else: # Untested. Now tested, this doesn't work, needs serious modifications to make work
             with Pool() as pool:
                 sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool)
-                sampler.run_mcmc(pos, nsteps, progress=True)
+                sampler.run_mcmc(pos, nsteps, progress=verbose)
 
 
     else:
@@ -846,14 +846,16 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
 
     task_part = partial(get_profiles, all_frames, order, poly_cos, continuum_error)
     if len(frames)>1:
-        with mp.Pool(mp.cpu_count()) as pool:
-            results=[pool.map(task_part, np.arange(len(frames)))]
-        results = np.array(results[0])
-        for i in range(len(frames)): 
-            all_frames[i]=results[i][i]
-        # for counter in range(len(frames)):
-        #     all_frames = get_profiles(all_frames, order, poly_cos, continuum_error, counter)  
-    else: all_frames = get_profiles(all_frames, order, poly_cos, continuum_error, 0)
+        # ctx = mp.get_context("fork") # Changed from spawn to fork to avoid multiple reruns of page
+        # with ctx.Pool(processes = mp.cpu_count()) as pool:
+        #     results=[pool.map(task_part, np.arange(len(frames)))]
+        # results = np.array(results[0])
+        # for i in range(len(frames)):
+        #     all_frames[i]=results[i][i]
+        for counter in range(len(frames)):
+            all_frames = get_profiles(all_frames, order, poly_cos, continuum_error, counter)  
+    else:
+        all_frames = get_profiles(all_frames, order, poly_cos, continuum_error, 0)
 
     return all_frames
 
@@ -881,7 +883,7 @@ def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), s
         list: Profiles (in normalised flux)
         list: Profile Errors (in normalised flux)
     """ 
-     
+
     global velocities
     velocities = vgrid.copy()
     global all_frames
