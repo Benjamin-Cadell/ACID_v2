@@ -1,6 +1,7 @@
 #%%
 from astropy.io import fits
 import importlib, os
+print(os.getcwd())
 import multiprocessing as mp
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ os.chdir(os.path.dirname(__file__))
 os.chdir("../") # ensures we are in the main directory
 import ACID_code_v2 as acid
 importlib.reload(acid)
-os.chdir("example") # change to example directory
+os.chdir("example") # change back to example directory
 
 spec_file = fits.open('sample_spec_1.fits')
 

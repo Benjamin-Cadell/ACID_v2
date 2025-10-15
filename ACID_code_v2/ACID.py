@@ -9,7 +9,8 @@ import multiprocessing as mp
 from functools import partial
 from multiprocessing import Pool
 from math import log10, floor
-import LSD, utils
+from . import utils
+from . import LSD
 
 warnings.filterwarnings("ignore")
 importlib.reload(LSD)
