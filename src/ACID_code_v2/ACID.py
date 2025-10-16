@@ -511,28 +511,62 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
     Fits the continuum of the given spectra and performs LSD on the continuum corrected spectra, returning an LSD profile for each spectrum given. 
     Spectra must cover a similiar wavelength range.
 
-    Args:
-        input_wavelengths (list): Wavelengths for each frame (in Angstroms).
-        input_spectra (list): Spectral frames (in flux).
-        input_spectral_errors (list): Errors for each frame (in flux).
-        line (str): Path to linelist. Takes VALD linelist in long or short format as input. Minimum line depth input into VALD must be less than 1/(3*SN) where SN is the highest signal-to-noise ratio of the spectra. 
-        frame_sns (list): Average signal-to-noise ratio for each frame (used to calculate minimum line depth to consider from line list. 
-        vgrid (array): Velocity grid for LSD profiles (in km/s).
-        all_frames (str or array, optional): Output array for resulting profiles. Only neccessary if looping ACID function over many wavelength regions or order (in the case of echelle spectra). General shape needs to be (no. of frames, 1, 2, no. of velocity pixels). 
-        poly_or (int, optional): Order of polynomial to fit as the continuum.
-        pix_chunk (int, optional): Size of 'bad' regions in pixels. 'bad' areas are identified by the residuals between an inital model and the data. If a residual deviates by a specified percentage (dev_perv) for a specified number of pixels (pix_chunk) it is masked. The smaller the region the less aggresive the masking applied will be.
-        dev_perc (int, optional): Allowed deviation percentage. 'bad' areas are identified by the residuals between an inital model and the data. If a residual deviates by a specified percentage (dev_perv) for a specified number of pixels (pix_chunk) it is masked. The smaller the deviation percentage the less aggresive the masking applied will be.
-        n_sig (int, optional): Number of sigma to clip in sigma clipping. Ill fitting lines are identified by sigma-clipping the residuals between an inital model and the data. The regions that are clipped from the residuals will be masked in the spectra. This masking is only applied to find the continuum fit and is removed when LSD is applied to obtain the final profiles. 
-        telluric_lines (list, optional): List of wavelengths (in Angstroms) of telluric lines to be masked. This can also include problematic lines/features that should be masked also. For each wavelengths in the list ~3Å eith side of the line is masked.
-        order (int, optional): Only applicable if an all_frames output array has been provided as this is the order position in that array where the result should be input. i.e. if order = 5 the output profile and errors would be inserted in all_frames[:, 5].
-        verbose (bool, optional): If True prints out time taken for each section of the code. Defaults to True.
-        parallel (bool, optional): If True uses multiprocessing to calculate the profiles for each frame in parallel. Defaults to True.
-        cores (int, optional): Number of cores to use if parallel=True. If None (default) all available cores will be used.
-        nsteps (int, optional): Number of steps for the MCMC to run, try increasing if it doesn't converge, defaults is 8000.
-    Returns:
-        array: Resulting profiles and errors for spectra.
-    """
+    Parameters
+    ----------
+    input_wavelengths : list or array
+        Wavelengths for each frame (in Angstroms).
+    input_spectra : list or array
+        Spectral frames (in flux).
+    input_spectral_errors : list or array
+        Errors for each frame (in flux).
+    line : str
+        Path to linelist. Takes VALD linelist in long or short format as input. Minimum line depth input into VALD must
+        be less than 1/(3*SN) where SN is the highest signal-to-noise ratio of the spectra. 
+    frame_sns : list or array
+        Average signal-to-noise ratio for each frame (used to calculate minimum line depth to consider from line list. 
+    vgrid : array
+        Velocity grid for LSD profiles (in km/s).
+    all_frames : str or array, optional
+        Output array for resulting profiles. Only neccessary if looping ACID function over many wavelength
+        regions or order (in the case of echelle spectra). General shape needs to be (no. of frames, 1, 2, no. of velocity pixels)., by default 'default'
+    poly_or : int, optional
+        Order of polynomial to fit as the continuum, by default 3
+    pix_chunk : int, optional
+        Size of 'bad' regions in pixels. 'bad' areas are identified by the residuals between an inital model
+        and the data. If a residual deviates by a specified percentage (dev_perc) for a specified number of pixels, by default 20
+    dev_perc : int, optional
+        Allowed deviation percentage. 'bad' areas are identified by the residuals between an inital model
+        and the data. If a residual deviates by a specified percentage (dev_perc) for a specified number of pixels, by default 25
+    n_sig : int, optional
+        Number of sigma to clip in sigma clipping. Ill fitting lines are identified by sigma-clipping the
+        residuals between an inital model and the data. The regions that are clipped from the residuals will
+        be masked in the spectra. This masking is only applied to find the continuum fit and is removed when
+        LSD is applied to obtain the final profiles, by default 1
+    telluric_lines : list, optional
+        List of wavelengths (in Angstroms) of telluric lines to be masked. This can also include problematic
+        lines/features that should be masked also. For each wavelengths in the list ~3Å eith side of the line is masked., by default None
+    order : int, optional
+        Only applicable if an all_frames output array has been provided as this is the order position in that
+        array where the result should be input. i.e. if order = 5 the output profile and errors would be inserted in all_frames[:, 5]., by default 0
+    verbose : bool, optional
+        If True prints out time taken for each section of the code. Defaults to True., by default True
+    parallel : bool, optional
+        If True uses multiprocessing to calculate the profiles for each frame in parallel, by default True
+    cores : int, optional
+        Number of cores to use if parallel=True. If None (default) all available cores will be used, by default None
+    nsteps : int, optional
+        nsteps (int, optional): Number of steps for the MCMC to run, try increasing if it doesn't converge, by default 8000
 
+    Returns
+    -------
+    array
+        Resulting profiles and errors for spectra.
+
+    Raises
+    ------
+    TypeError
+        If the input types are not as expected.
+    """
     ### Setup
 
     # Ensure inputs are lists, np.arrays are converted to lists
@@ -852,32 +886,35 @@ def ACID(input_wavelengths, input_spectra, input_spectral_errors, line, frame_sn
 
     return all_frames
 
-def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), save_path = './', file_type = 'e2ds',
-               pix_chunk = 20, dev_perc = 25, n_sig=1, telluric_lines = None, **kwargs):
+def ACID_HARPS(filelist, line, vgrid, order_range=np.arange(10,70), save_path = './', file_type = 'e2ds', **kwargs):
+    """_summary_
 
+    Parameters
+    ----------
+    filelist : list of strings
+        List of files. Files must come from the same observation night as continuum is fit for a combined spectrum of all frames. A profile and associated errors will be produced for each file specified.
+    line : str
+        Path to linelist. Takes VALD linelist in long or short format as input. Minimum line depth input into VALD must be less than 1/(3*SN) where SN is the highest signal-to-noise ratio of the spectra. 
+    vgrid : array
+        Velocity grid for LSD profiles (in km/s).
+    order_range : array, optional
+        Orders to be included in the final profiles. If s1d files are input, the corresponding wavelengths will be considered, by default np.arange(10,70)
+    save_path : str, optional
+        Path to the directory where output files will be saved, by default './'
+    file_type : str, optional
+        Type of the input files, either "e2ds" or "s1d", by default 'e2ds'
+    **kwargs
+        Additional arguments to be passed to the ACID function. See ACID function for details.
 
-    """Accurate Continuum fItting and Deconvolution for HARPS e2ds and s1d spectra (DRS pipeline 3.5)
-
-    Fits the continuum of the given spectra and performs LSD on the continuum corrected spectra, returning an LSD profile for each file given. Files must all be kept in the same folder as well as thier corresponding blaze files. If 's1d' are being used their e2ds equivalents must also be in this folder. Result files containing profiles and associated errors for each order (or corresponding wavelength range in the case of 's1d' files) will be created and saved to a specified folder. It is recommended that this folder is seperate to the input files.
-
-    Args:
-        filelist (list): List of files. Files must come from the same observation night as continuum is fit for a combined spectrum of all frames. A profile and associated errors will be produced for each file specified.
-        line (str): Path to linelist. Takes VALD linelist in long or short format as input. Minimum line depth input into VALD must be less than 1/(3*SN) where SN is the highest signal-to-noise ratio of the spectra. 
-        vgrid (array): Velocity grid for LSD profiles (in km/s).
-        poly_or (int, optional): Order of polynomial to fit as the continuum.
-        order_range (array, optional): Orders to be included in the final profiles. If s1d files are input, the corresponding wavelengths will be considered.
-        save_path (array, optional): Path to folder that result files will be saved to.
-        file_type (str, optional): 'e2ds' or 's1d'.
-        pix_chunk (int, optional): Size of 'bad' regions in pixels. 'bad' areas are identified by the residuals between an inital model and the data. If a residual deviates by a specified percentage (dev_perv) for a specified number of pixels (pix_chunk) it is masked. The smaller the region the less aggresive the masking applied will be.
-        dev_perc (int, optional): Allowed deviation percentage. 'bad' areas are identified by the residuals between an inital model and the data. If a residual deviates by a specified percentage (dev_perv) for a specified number of pixels (pix_chunk) it is masked. The smaller the deviation percentage the less aggresive the masking applied will be.
-        n_sig (int, optional): Number of sigma to clip in sigma clipping. Ill fitting lines are identified by sigma-clipping the residuals between an inital model and the data. The regions that are clipped from the residuals will be masked in the spectra. This masking is only applied to find the continuum fit and is removed when LSD is applied to obtain the final profiles. 
-        telluric_lines (list, optional): List of wavelengths of telluric lines to be masked in Angstroms. This can also include problematic lines/features that should be masked also. For each wavelengths in the list ~3Å eith side of the line is masked.
-
-    Returns:
-        list: Barycentric Julian Date for files 
-        list: Profiles (in normalised flux)
-        list: Profile Errors (in normalised flux)
-    """ 
+    Returns
+    -------
+    list
+        Barycentric Julian Date for files
+    list
+        Profiles (in normalised flux)
+    list
+        Errors on profiles (in normalised flux)
+    """
 
     global velocities
     velocities = vgrid.copy()
@@ -885,8 +922,6 @@ def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), s
     all_frames = np.zeros((len(filelist), len(order_range), 2, len(velocities)))
     global linelist
     linelist = line
-    global poly_ord
-    poly_ord = poly_or
 
     global frames
     global frame_wavelengths
@@ -900,8 +935,7 @@ def ACID_HARPS(filelist, line, vgrid, poly_or=3, order_range=np.arange(10,70), s
 
         frame_wavelengths, frames, frame_errors, sns, telluric_spec = read_in_frames(order, filelist, file_type)
 
-        all_frames = ACID(frame_wavelengths, frames, frame_errors, linelist, sns, velocities, all_frames, poly_or,
-                          pix_chunk, dev_perc, n_sig, telluric_lines, order = order-min(order_range), **kwargs)
+        all_frames = ACID(frame_wavelengths, frames, frame_errors, linelist, sns, velocities, all_frames, order=order-min(order_range), **kwargs)
 
     # adding into fits files for each frame
     BJDs = []
