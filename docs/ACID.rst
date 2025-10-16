@@ -3,5 +3,5 @@
 ACID Functions
 ================
 
-.. automodule:: ACID_code_v2
+.. automodule:: src.ACID_code_v2.ACID
     :members:

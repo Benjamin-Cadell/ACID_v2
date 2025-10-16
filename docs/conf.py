@@ -1,7 +1,7 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../src'))
+sys.path.insert(0, os.path.abspath('..'))
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -19,10 +19,12 @@ root_doc = 'index'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = [
-    'sphinx.ext.autodoc', 
-    'sphinx.ext.napoleon',
-]
+extensions = ["sphinx.ext.autodoc",
+              "sphinx.ext.napoleon",
+              "sphinx.ext.doctest",
+              "sphinx.ext.viewcode",
+              "sphinx.ext.mathjax",
+              "nbsphinx", "myst_nb"]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
