@@ -5,12 +5,12 @@ import multiprocessing as mp
 import numpy as np
 import matplotlib.pyplot as plt
 try:
+    import ACID_code_v2 as acid
+except:
     os.chdir(os.path.dirname(__file__))
     os.chdir("../src") # ensures we are in the main directory
     import ACID_code_v2 as acid
     os.chdir("../example") # change back to example directory
-except:
-    import ACID_code_v2 as acid # from pip installation
 importlib.reload(acid)
 
 spec_file = fits.open('sample_spec_1.fits')
