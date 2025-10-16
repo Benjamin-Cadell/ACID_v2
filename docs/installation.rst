@@ -6,15 +6,14 @@ Installation
 Installing the package
 =======================
 
-ACID is currently compatable with python=3.7 due to issues arising from the multiprocessing module in newer versions of python (hopefully to be remedied in upcoming releases!). 
-It is therefore recommended to create a conda environment to avoid downgrading your local python installation. 
+ACID_v2 has been tested in Python 3.11, and is currently incompatible with 3.12. It is recommended to install ACID in a new conda environment to avoid dependency conflicts.
 
 In this example we create an environment named 'acid' and activate it using:
 
 .. code-block:: bash
 
-    conda create -n acid python=3.7
-    conda acivate acid
+    conda create -n acid python=3.11
+    conda activate acid
 
 Once the environment has been activated ACID can be installed using pip_:
 
@@ -22,16 +21,14 @@ Once the environment has been activated ACID can be installed using pip_:
 
 .. code-block:: bash
 
-    pip install ACID_code
+    pip install ACID_code_v2
 
 .. _source:
 
 Installing from the source
 ===========================
-In order to use the example data (for the tutorials_) or the test suite ACID will need to be installed from the source (i.e. directly from the GitHub repository).
+In order to use the example data (for the tutorials) or the test suite ACID will need to be installed from the source (i.e. directly from the GitHub repository).
 This can be done by cloning the source repository and installing from there.
-
-.. _tutorials: file:///Users/lucydolan/Documents/GitHub/ACID/docs/_build/html/using_ACID.html
 
 .. code-block:: bash
 
@@ -44,7 +41,7 @@ This can be done by cloning the source repository and installing from there.
 Testing the installation
 ==========================
 
-Test your installation by running our test file in the test directory using pytest_. This may take a while but should run without any errors if the installation has gone smoothly.
+Test your installation by running our test file in the test directory using pytest_. This may take a while (~1-2 min) but should run without any errors if the installation has gone smoothly.
 
 .. _pytest: https://docs.pytest.org/en/7.4.x/contents.html
 

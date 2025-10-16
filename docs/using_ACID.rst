@@ -3,9 +3,9 @@
 Using ACID
 -----------
 
-These tutorials requires use of the example data included in the source_ installation.
+These tutorials requires use of the example data included in the example_ folder.
 
-.. _source: file:///Users/lucydolan/Documents/GitHub/ACID/docs/_build/html/installation.html#installing-from-the-source 
+.. _source: https://github.com/Benjamin-Cadell/ACID_v2/tree/main/example
 
 Quickstart
 =============
@@ -26,9 +26,9 @@ In the 'example' directory we can set up our inputs are follows:
    error = spec_file[2].data        # Spectral Flux Errors
    sn = spec_file[3].data           # SN of Spectrum
 
-   linelist = './example_linelist.txt' # Insert path to line list
+   linelist = 'example_linelist.txt' # Insert path to line list
 
-The stellar line list can be obtained from VALD_ using their 'Extract Stellar' feature. You should input stellar parameters that correspond to your object and ensure that the wavelength range input covers the entire wavelength range of your spectrum. 
+The stellar line list can also be obtained from VALD_ using their 'Extract Stellar' feature. You should input stellar parameters that correspond to your object and ensure that the wavelength range input covers the entire wavelength range of your spectrum. 
 The detection threshold input to VALD must be less than 1/(3*SN) where SN is the signal-to-noise of the spectrum.
 
 .. _VALD: http://vald.astro.uu.se/ 
@@ -37,9 +37,9 @@ We can then run ACID and plot the final results:
 
 .. code-block:: python
 
-   import ACID_code.ACID as acid
    import numpy as np
    import matplotlib.pyplot as plt
+   import ACID_code_v2 as acid
 
    # choose a velocity grid for the final profile(s)
    deltav = acid.calculate_deltav(wavelength)   # velocity pixel size must not be smaller than the spectral pixel size - can use calculate_deltav function if unsure what this would be.
@@ -88,13 +88,13 @@ As in the previous example, we must first read in the data:
       errors.append(spec_file[2].data)         # Spectral Flux Errors
       sns.append(float(spec_file[3].data))     # SN of Spectrum
 
-   linelist = './example_linelist.txt' # Insert path to line list
+   linelist = 'example_linelist.txt' # Insert path to line list
 
 Once the inputs have been constructed ACID can be applied and the results plotted. 
 
 .. code-block:: python
 
-   import ACID_code.ACID as acid
+   import ACID_code_v2 as acid
    import numpy as np
    import matplotlib.pyplot as plt
 
@@ -123,9 +123,8 @@ Multiple wavelength ranges
 =========================================
 
 In this example we will only consider one frame, however this example can be combined with the previous example to apply ACID to multiple frames and orders.
-Firstly, we will read in the data (exactly how we did in the Quickstart_ tutorial).
+Firstly, we will read in the data (exactly how we did in the quickstart tutorial).
 
-.. _Quickstart: file:///Users/lucydolan/Documents/GitHub/ACID/docs/_build/html/using_ACID.html#quickstart 
 
 .. code-block:: python
 
@@ -138,14 +137,14 @@ Firstly, we will read in the data (exactly how we did in the Quickstart_ tutoria
    error = spec_file[2].data        # Spectral Flux Errors
    sn = spec_file[3].data           # SN of Spectrum
 
-   linelist = './example_linelist.txt' # Insert path to line list
+   linelist = 'example_linelist.txt' # Insert path to line list
 
 We can then loop through our desired wavelength ranges, run ACID and plot the final results. In this example we will split the wavelength ranges into 1000Å chunks.
 When looping over wavelength ranges we also need to provide the result array ('all_frames') to keep all results in the same array.
 
 .. code-block:: python
 
-   import ACID_code.ACID as acid
+   import ACID_code_v2 as acid
    import numpy as np
    import matplotlib.pyplot as plt
 
@@ -225,7 +224,7 @@ These inputs can be input into the HARPS function of ACID (ACID_HARPS):
 
 .. code-block:: python
 
-   import ACID_code.ACID as acid
+   import ACID_code_v2 as acid
 
    # run ACID function
    BJDs, profiles, errors = acid.ACID_HARPS(filelist, linelist, velocities)
