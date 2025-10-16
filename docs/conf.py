@@ -22,9 +22,7 @@ root_doc = 'index'
 extensions = ["sphinx.ext.autodoc",
               "sphinx.ext.napoleon",
               "sphinx.ext.doctest",
-              "sphinx.ext.viewcode",
-              "sphinx.ext.mathjax",
-              "nbsphinx", "myst_nb"]
+              "sphinx.ext.viewcode",]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
