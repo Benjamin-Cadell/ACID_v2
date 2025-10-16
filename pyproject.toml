@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ACID_code_v2"
-version = "0.1.7"
+version = "0.1.8"
 authors = [
     {name = "Benjamin Cadell", email="bcadell01@qub.ac.uk"},
     {name = "Lucy Dolan"}
@@ -38,7 +38,7 @@ docs = [
 Homepage = "https://github.com/Benjamin-Cadell/ACID"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 
 # ... other project metadata fields as listed in:
 #     https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
