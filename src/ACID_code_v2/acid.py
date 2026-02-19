@@ -153,7 +153,6 @@ class Acid:
         nsteps         :int|npint      = 10000,
         return_result  :bool           = True,
         production_run :bool           = False,
-        moves_input    :bool           = False,
 
         # Testing and internal kwargs
         correct_continuum              = False,
@@ -310,7 +309,6 @@ class Acid:
         self.production_run = production_run
         self.cores          = cores
         self._input_data    = _input_data if _input_data is not None else {}
-        self.moves_input    = moves_input
 
         # The tests
         self.no_a_old                = no_a_old
@@ -973,24 +971,18 @@ class Acid:
                 self.cores = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
             else:
                 self.cores = os.cpu_count()
-        
+
         if self.moves is True:
             print("moves is True")
-            moves=[ # Use the new moves option in emcee v3 for faster convergence
-                (emcee.moves.StretchMove(), 0.6),
-                (emcee.moves.DEMove(), 0.3),
+            moves = [
+                (emcee.moves.StretchMove(), 0.20),
                 (emcee.moves.DESnookerMove(), 0.1),
+                (emcee.moves.DEMove(), 0.6),
+                (emcee.moves.DEMove(gamma0=1.0), 0.1)
             ]
-            if self.moves_input is True:
-                print("Using custom moves input")
-                moves = [
-                    (emcee.moves.StretchMove(), 0.20),
-                    (emcee.moves.DESnookerMove(), 0.1),
-                    (emcee.moves.DEMove(), 0.6),
-                    (emcee.moves.DEMove(gamma0=1.0), 0.1)
-                ]
         else:
             moves = None
+
         sampler_kwargs = {
             "nwalkers"   : self.nwalkers,
             "ndim"       : self.ndim,
