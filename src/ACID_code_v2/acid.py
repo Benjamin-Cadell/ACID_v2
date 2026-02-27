@@ -1015,7 +1015,7 @@ class Acid:
             "nsteps"       : nsteps,
             "progress"     : sampler_verbosity,
             "store"        : True,
-            "tune"         : True
+            "tune"         : False, # temp
         }
         return sampler_kwargs, mcmc_kwargs
 
