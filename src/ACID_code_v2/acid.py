@@ -153,6 +153,7 @@ class Acid:
         min_tau_factor        :int|npint      = 50,
         tau_tol               :float          = 0.05,
         run_mcmc              :bool           = True,
+        _moves_ratio                          = None,
         **kwargs,
         ):
         """Fits the continuum of the given spectra and performs LSD on the continuum corrected spectra,
@@ -291,6 +292,7 @@ class Acid:
             "min_tau_factor"        : min_tau_factor,
             "tau_tol"               : tau_tol,
             "run_mcmc"              : run_mcmc,
+            "_moves_ratio"          : _moves_ratio,
         }
         # TODO: make all input defaults None and overwrite config if input, with config handling problems caused therein
 
@@ -985,11 +987,21 @@ class Acid:
             else:
                 self.config.cores = os.cpu_count()
         # TODO Make moves a ACID input
+        if self.config._moves_ratio is not None:
+            st = self.config._moves_ratio[0]
+            des = self.config._moves_ratio[1]
+            de = self.config._moves_ratio[2]
+            deg = self.config._moves_ratio[3]
+        else:
+            st = 0.20
+            des = 0.1
+            de = 0.6
+            deg = 0.1
         moves = [
-            (emcee.moves.StretchMove(), 0.20),
-            (emcee.moves.DESnookerMove(), 0.1),
-            (emcee.moves.DEMove(), 0.6),
-            (emcee.moves.DEMove(gamma0=1.0), 0.1)
+            (emcee.moves.StretchMove(), st),
+            (emcee.moves.DESnookerMove(), des),
+            (emcee.moves.DEMove(), de),
+            (emcee.moves.DEMove(gamma0=1.0), deg)
         ]
 
         sampler_kwargs = {
