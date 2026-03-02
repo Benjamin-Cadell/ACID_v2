@@ -992,6 +992,7 @@ class Acid:
             des = self.config._moves_ratio[1]
             de = self.config._moves_ratio[2]
             deg = self.config._moves_ratio[3]
+            print(f"Using custom move ratios: StretchMove: {st}, DESnookerMove: {des}, DEMove: {de}, DEMove(gamma0=1.0): {deg}")
         else:
             st = 0.20
             des = 0.1
